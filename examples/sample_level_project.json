@@ -1,0 +1,8 @@
+{
+  "project": "Mist Dungeon - Level 1",
+  "description": "A medium-sized dungeon with fog theme, 10-12 minute expected playtime.",
+  "map": {"width": 640, "height": 640},
+  "chunk_size": 64,
+  "expected_chunks": 100,
+  "redundancy_default": 1
+}
