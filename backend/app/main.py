@@ -1,10 +1,11 @@
-"""Minimal FastAPI API for the dispatcher PoC."""
+"""Minimal FastAPI API for the dispatcher PoC with merge endpoint."""
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List
 
 from backend.app.state import TaskStateError
 from backend.services.dispatcher import Dispatcher
+from backend.services.merge_service import merge_project
 
 app = FastAPI(title="ZeroCaffeine Studio PoC", version="0.2.0")
 
@@ -47,8 +48,15 @@ class Task(BaseModel):
     status: str = "new"
     assigned_worker_id: str | None = None
 
+class Result(BaseModel):
+    id: str
+    task_id: str
+    worker_name: str
+    result_text: str
+
 projects_db: dict[str, Project] = {}
 tasks_db: dict[str, Task] = {}
+results_db: dict[str, Result] = {}
 dispatcher = Dispatcher(tasks_db)
 
 @app.get("/health")
@@ -105,3 +113,30 @@ def complete_task(task_id: str, request: CompleteInput):
 def dispatcher_queue():
     dispatcher.expire_leases()
     return dispatcher.queue_snapshot()
+
+@app.post("/tasks/{task_id}/result", response_model=Result)
+def submit_result(task_id: str, result_payload: dict):
+    if task_id not in tasks_db:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    result = Result(
+        id=f"res-{len(results_db) + 1}",
+        task_id=task_id,
+        worker_name=result_payload.get("worker_name", "unknown-worker"),
+        result_text=result_payload.get("result_text", ""),
+    )
+    results_db[result.id] = result
+    # mark task completed if assigned
+    try:
+        dispatcher.complete(task_id, result.worker_name)
+    except Exception:
+        # ignore lease ownership in PoC result submission
+        tasks_db[task_id].status = "completed"
+    return result
+
+@app.post("/projects/{project_id}/merge")
+def project_merge(project_id: str):
+    if project_id not in projects_db:
+        raise HTTPException(404, "Project not found")
+    merged, repairs = merge_project(project_id, tasks_db, results_db)
+    return {"merged": merged, "repairs_created": repairs}
