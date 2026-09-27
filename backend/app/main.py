@@ -1,5 +1,5 @@
-"""Minimal FastAPI API for the dispatcher PoC with merge endpoint."""
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List
 
@@ -8,6 +8,20 @@ from backend.services.dispatcher import Dispatcher
 from backend.services.merge_service import merge_project
 
 app = FastAPI(title="ZeroCaffeine Studio PoC", version="0.2.0")
+
+# Allow the frontend served from localhost:8080 to interact with API during demo
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ProjectInput(BaseModel):
     title: str = Field(..., min_length=1)
