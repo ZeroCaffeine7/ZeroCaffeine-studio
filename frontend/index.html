@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZeroCaffeine Studio Demo</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #161d2f;
+        --card: #1d2640;
+        --line: #2d3a5a;
+        --text: #eaf1ff;
+        --muted: #9fb3d9;
+        --accent: #5cc8ff;
+        --success: #5dd39e;
+        --warning: #f8d66d;
+        --danger: #ff6b6b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: linear-gradient(180deg, #0b1020 0%, #11182c 100%);
+        color: var(--text);
+      }
+      .container {
+        max-width: 1200px;
+        margin: 40px auto;
+        padding: 20px;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(22, 29, 47, 0.9);
+        border: 1px solid var(--line);
+        padding: 16px 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+      }
+      .brand {
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+      .status-pill {
+        background: rgba(92, 200, 255, 0.12);
+        color: var(--accent);
+        border: 1px solid rgba(92, 200, 255, 0.4);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 0.9rem;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .panel {
+        background: rgba(29, 38, 64, 0.95);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 18px;
+        min-height: 200px;
+      }
+      .panel h3 {
+        margin: 0 0 16px;
+        font-size: 1.1rem;
+      }
+      .task-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .task {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .task-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+      .task-name {
+        font-weight: 600;
+      }
+      .badge {
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+      }
+      .level { background: rgba(92, 200, 255, 0.12); color: var(--accent); }
+      .enemy { background: rgba(255, 107, 107, 0.12); color: var(--danger); }
+      .story { background: rgba(93, 211, 158, 0.12); color: var(--success); }
+      .qa { background: rgba(248, 214, 109, 0.12); color: var(--warning); }
+      .summary-box {
+        margin-top: 20px;
+        background: rgba(16, 21, 35, 0.95);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 20px;
+      }
+      .summary-box h3 { margin-top: 0; }
+      .summary-box pre {
+        white-space: pre-wrap;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.5;
+      }
+      .flow {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .step {
+        flex: 1 1 180px;
+        background: rgba(22, 29, 47, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .step strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <div class="brand">ZeroCaffeine Studio</div>
+        <div class="status-pill">AI Game Studio PoC</div>
+      </div>
+
+      <div class="flow">
+        <div class="step"><strong>1. Boss brief</strong>发布第一关需求</div>
+        <div class="step"><strong>2. Manager</strong>拆解 level / enemy / story / QA</div>
+        <div class="step"><strong>3. Workers</strong>并行产出结果</div>
+        <div class="step"><strong>4. Merge</strong>合并与冲突修复</div>
+        <div class="step"><strong>5. Review</strong>审核并产出最终稿</div>
+      </div>
+
+      <div class="grid" style="margin-top:20px;">
+        <div class="panel">
+          <h3>Boss Input</h3>
+          <div class="task-list">
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Mist Dungeon - Level 1</div>
+                <span class="badge level">Project</span>
+              </div>
+              <div>目标：设计一张 10 分钟的 fog-themed dungeon，强调探索与险恶遭遇。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Manager Split</h3>
+          <div class="task-list">
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Level Design</div>
+                <span class="badge level">Assigned</span>
+              </div>
+              <div>布局、路线、3 个关键区域与入口出口。</div>
+            </div>
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Enemy Design</div>
+                <span class="badge enemy">Assigned</span>
+              </div>
+              <div>3 类敌人 + 难度曲线选择。</div>
+            </div>
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Narrative</div>
+                <span class="badge story">Assigned</span>
+              </div>
+              <div>地牢背景与探索动机说明。</div>
+            </div>
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">QA</div>
+                <span class="badge qa">Assigned</span>
+              </div>
+              <div>可玩性、风险与 playtest checklist.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Worker Output</h3>
+          <div class="task-list">
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Level Designer</div>
+                <span class="badge level">Completed</span>
+              </div>
+              <div>区域 A：入口，区域 B：陷阱走廊，区域 C：密室 boss room。</div>
+            </div>
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Enemy Designer</div>
+                <span class="badge enemy">Completed</span>
+              </div>
+              <div>幽灵、巡逻者、沼泽狼，难度阶梯稳定。</div>
+            </div>
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">Narrative Designer</div>
+                <span class="badge story">Completed</span>
+              </div>
+              <div>遗失教堂与亡灵回响，推动玩家继续探索。</div>
+            </div>
+            <div class="task">
+              <div class="task-header">
+                <div class="task-name">QA Tester</div>
+                <span class="badge qa">Completed</span>
+              </div>
+              <div>检查连接、资源、难度与 boss 过度难度问题。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary-box">
+        <h3>Manager Final Merge</h3>
+        <pre># Manager Consolidated Output
+
+- Level Design: 3 zones, clear gate-and-corridor flow, good vertical variation.
+- Enemy Design: 3 archetypes with manageable progression.
+- Narrative: Atmosphere fits the fog identity and creates exploration incentives.
+- QA: Note minor connector mismatch in East tunnel; fix by adjusting one choke point.
+
+Final recommendation: ready for prototype iteration with one small correction to east tunnel connectivity.</pre>
+      </div>
+    </div>
+  </body>
+</html>
