@@ -45,6 +45,15 @@ services:
       - api
       - redis
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
