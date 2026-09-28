@@ -1,0 +1,59 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "#ff0000",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "ZeroCaffeine Studio PoC dashboard",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Queue length (per role)",
+      "targets": [
+        {
+          "expr": "zc_queue_length{role=\"level_design\"}",
+          "refId": "A"
+        }
+      ],
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Model calls success rate (5m)",
+      "targets": [
+        {
+          "expr": "(sum(rate(zc_model_calls_total{status=\"success\"}[5m])) / sum(rate(zc_model_calls_total[5m]))) * 100",
+          "refId": "B"
+        }
+      ],
+      "id": 2
+    },
+    {
+      "type": "heatmap",
+      "title": "Model latency (s)",
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(zc_model_call_duration_seconds_bucket[5m])) by (le))", "refId": "C"}
+      ],
+      "id": 3
+    },
+    {
+      "type": "graph",
+      "title": "Worker retries (rate)",
+      "targets": [
+        {"expr": "rate(zc_worker_retries_total[5m])", "refId": "D"}
+      ],
+      "id": 4
+    }
+  ],
+  "schemaVersion": 27,
+  "title": "ZeroCaffeine Studio PoC",
+  "version": 1
+}

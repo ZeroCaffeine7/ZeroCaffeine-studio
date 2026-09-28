@@ -1,0 +1,22 @@
+# Grafana alerting & Prometheus rules (example)
+
+groups:
+  - name: zc-alerts
+    rules:
+      - alert: HighQueueLength
+        expr: zc_queue_length{role="level_design"} > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Level design queue length is high"
+          description: "Queue length for level_design has exceeded 50 for more than 5 minutes."
+
+      - alert: ModelErrorRateHigh
+        expr: (sum(rate(zc_model_calls_total{status="error"}[5m])) / sum(rate(zc_model_calls_total[5m]))) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model error rate > 10%"
+          description: "Model call error rate exceeded 10% over the last 5m."
