@@ -17,7 +17,6 @@ def pop_task(role: str, timeout: int = 5):
     key = f"queue:{role}"
     res = _client.brpop(key, timeout=timeout)
     if res:
-        # brpop returns (key, value)
         return res[1]
     return None
 
@@ -28,3 +27,20 @@ def queue_length(role: str) -> int:
 
 def list_queues(prefix: str = 'queue:'):
     return _client.keys(f"{prefix}*")
+
+
+# Retry tracking for tasks
+def increment_retry(task_id: str) -> int:
+    key = f"retries:{task_id}"
+    return _client.incr(key)
+
+
+def get_retry(task_id: str) -> int:
+    key = f"retries:{task_id}"
+    val = _client.get(key)
+    return int(val) if val else 0
+
+
+def reset_retry(task_id: str) -> None:
+    key = f"retries:{task_id}"
+    _client.delete(key)

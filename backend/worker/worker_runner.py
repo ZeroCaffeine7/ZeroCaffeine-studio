@@ -2,7 +2,8 @@
 """Worker runner for PoC using Redis-backed queues and real LLM calls.
 
 Now calls the model_adapter to generate task output instead of simulating.
-Set OPENAI_API_KEY in the environment to enable OpenAI usage.
+Implements requeue-on-failure with retry counting in Redis and fails task
+permanently after max retries by calling the API fail endpoint.
 """
 import argparse
 import time
@@ -13,6 +14,8 @@ import os
 import sys
 
 API = os.environ.get('POC_API_URL', 'http://localhost:8000')
+MAX_RETRIES = int(os.environ.get('WORKER_MAX_RETRIES', '3'))
+REQUEUE_BACKOFF = float(os.environ.get('WORKER_REQUEUE_BACKOFF', '1.0'))
 
 from backend.services import queue_service
 from backend.services import model_adapter
@@ -41,7 +44,7 @@ def process_loop(worker_id: str, role: str, stop_event: threading.Event, tier: s
 
             # Fetch task details
             try:
-                rtask = session.get(f"{API}/tasks/{task_id}", timeout=10)
+                rtask = session.get(f"{API}/task/{task_id}", timeout=10)
                 if rtask.status_code != 200:
                     print(f"[{worker_id}] failed to fetch task {task_id}: {rtask.status_code}")
                     continue
@@ -55,8 +58,23 @@ def process_loop(worker_id: str, role: str, stop_event: threading.Event, tier: s
                 result_text = model_adapter.generate_for_task(task, tier=tier)
             except Exception as e:
                 print(f"[{worker_id}] model call failed for {task_id}: {e}")
-                # mark task as failed or requeue; for PoC we'll set status back to 'new'
-                # optionally could push back to queue
+                # handle retry logic via Redis counter
+                retries = queue_service.increment_retry(str(task_id))
+                if retries < MAX_RETRIES:
+                    # requeue task with small backoff
+                    time.sleep(REQUEUE_BACKOFF * retries)
+                    queue_service.push_task(str(task_id), role)
+                    print(f"[{worker_id}] requeued task {task_id} (retry {retries})")
+                else:
+                    # permanently fail task via API
+                    try:
+                        fs = session.post(f"{API}/tasks/{task_id}/fail", json={"reason": str(e)})
+                        if fs.status_code == 200:
+                            print(f"[{worker_id}] marked task {task_id} as failed after {retries} retries")
+                        else:
+                            print(f"[{worker_id}] failed to mark task {task_id} as failed: {fs.status_code} {fs.text}")
+                    except Exception as ee:
+                        print(f"[{worker_id}] error calling fail endpoint for {task_id}: {ee}")
                 continue
 
             # Submit result

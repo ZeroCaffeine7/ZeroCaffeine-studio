@@ -1,18 +1,12 @@
 """Model adapter for PoC allowing calling OpenAI or a local inference endpoint.
 
-Environment variables:
-- OPENAI_API_KEY: if present, use OpenAI Chat Completions endpoint
-- LOCAL_MODEL_URL: if present, POST to this URL with {'prompt': ...} and expect {'text': ...}
-
-Functionality:
-- generate_text(prompt, tier): returns generated text
-- generate_for_task(task): convenience wrapper that builds a prompt from task
-
-This is intentionally minimal. For production, add retries, rate-limiting, batching, caching, costs accounting, and error handling.
+Added robust retry/backoff logic to improve stability when calling remote
+inference providers. Retries are configurable via environment variables.
 """
 from __future__ import annotations
 
 import os
+import time
 import requests
 from typing import Optional
 
@@ -25,6 +19,11 @@ MODEL_TIERS = {
     'synthesis': os.environ.get('SYNTHESIS_MODEL', 'gpt-4'),
     'review': os.environ.get('REVIEW_MODEL', 'gpt-4'),
 }
+
+# Retry configuration
+MAX_RETRIES = int(os.environ.get('MODEL_MAX_RETRIES', '3'))
+BACKOFF_BASE = float(os.environ.get('MODEL_BACKOFF_BASE', '1.0'))  # seconds
+BACKOFF_MULTIPLIER = float(os.environ.get('MODEL_BACKOFF_MULTIPLIER', '2.0'))
 
 
 def _call_openai_chat(messages, model: str = 'gpt-3.5-turbo', temperature: float = 0.7) -> str:
@@ -44,7 +43,6 @@ def _call_openai_chat(messages, model: str = 'gpt-3.5-turbo', temperature: float
     r = requests.post(url, json=payload, headers=headers, timeout=60)
     r.raise_for_status()
     data = r.json()
-    # naive extraction
     return data['choices'][0]['message']['content']
 
 
@@ -58,30 +56,44 @@ def _call_local_model(prompt: str) -> str:
 
 
 def generate_text(prompt: str, tier: str = 'draft') -> str:
-    """Generate text for a prompt using configured provider and tier."""
-    # choose model name from tier
+    """Generate text for a prompt using configured provider and tier.
+
+    Retries on transient errors using exponential backoff. If all retries
+    exhaust, an exception is raised to the caller.
+    """
     model = MODEL_TIERS.get(tier, MODEL_TIERS['draft'])
 
-    # Prefer local model if configured
-    if LOCAL_MODEL_URL:
+    attempt = 0
+    backoff = BACKOFF_BASE
+    last_exc = None
+
+    while attempt < MAX_RETRIES:
         try:
-            return _call_local_model(prompt)
-        except Exception as e:
-            # fallback to openai if available
+            # Prefer local model if configured
+            if LOCAL_MODEL_URL:
+                return _call_local_model(prompt)
+
             if OPENAI_API_KEY:
-                pass
-            else:
-                raise
+                messages = [
+                    {"role": "system", "content": "You are a helpful level design assistant. Provide structured output when possible."},
+                    {"role": "user", "content": prompt},
+                ]
+                return _call_openai_chat(messages, model=model, temperature=0.7)
 
-    if OPENAI_API_KEY:
-        messages = [
-            {"role": "system", "content": "You are a helpful level design assistant. Provide structured output when possible."},
-            {"role": "user", "content": prompt},
-        ]
-        return _call_openai_chat(messages, model=model, temperature=0.7)
+            # Fallback deterministic behavior
+            return f"[SIMULATED OUTPUT] Prompt was: {prompt[:200]}"
 
-    # Fallback: deterministic placeholder (no model)
-    return f"[SIMULATED OUTPUT] Prompt was: {prompt[:200]}"
+        except Exception as e:
+            last_exc = e
+            attempt += 1
+            if attempt >= MAX_RETRIES:
+                break
+            # simple jitter
+            sleep_time = backoff * (1 + 0.1 * (attempt % 3))
+            time.sleep(sleep_time)
+            backoff *= BACKOFF_MULTIPLIER
+    # If we reach here, all attempts failed
+    raise RuntimeError(f"Model generation failed after {MAX_RETRIES} attempts: {last_exc}")
 
 
 def generate_for_task(task: dict, tier: str = 'draft') -> str:
