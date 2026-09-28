@@ -4,6 +4,9 @@
 Now calls the model_adapter to generate task output instead of simulating.
 Implements requeue-on-failure with retry counting in Redis and fails task
 permanently after max retries by calling the API fail endpoint.
+
+Also starts a Prometheus metrics HTTP server per worker process so Prometheus
+can scrape worker-level metrics.
 """
 import argparse
 import time
@@ -13,12 +16,19 @@ import requests
 import os
 import sys
 
+from prometheus_client import start_http_server, Counter
+
 API = os.environ.get('POC_API_URL', 'http://localhost:8000')
 MAX_RETRIES = int(os.environ.get('WORKER_MAX_RETRIES', '3'))
 REQUEUE_BACKOFF = float(os.environ.get('WORKER_REQUEUE_BACKOFF', '1.0'))
+WORKER_METRICS_PORT = int(os.environ.get('WORKER_METRICS_PORT', '9125'))
 
 from backend.services import queue_service
 from backend.services import model_adapter
+
+# Worker metrics
+WORKER_TASKS = Counter('zc_worker_tasks_total', 'Count of worker processed tasks', ['worker_id', 'role', 'status'])
+WORKER_RETRIES = Counter('zc_worker_retries_total', 'Count of retries issued by worker', ['worker_id', 'role'])
 
 
 def process_loop(worker_id: str, role: str, stop_event: threading.Event, tier: str):
@@ -60,17 +70,20 @@ def process_loop(worker_id: str, role: str, stop_event: threading.Event, tier: s
                 print(f"[{worker_id}] model call failed for {task_id}: {e}")
                 # handle retry logic via Redis counter
                 retries = queue_service.increment_retry(str(task_id))
+                WORKER_RETRIES.labels(worker_id=worker_id, role=role).inc()
                 if retries < MAX_RETRIES:
                     # requeue task with small backoff
                     time.sleep(REQUEUE_BACKOFF * retries)
                     queue_service.push_task(str(task_id), role)
                     print(f"[{worker_id}] requeued task {task_id} (retry {retries})")
+                    WORKER_TASKS.labels(worker_id=worker_id, role=role, status='requeued').inc()
                 else:
                     # permanently fail task via API
                     try:
                         fs = session.post(f"{API}/tasks/{task_id}/fail", json={"reason": str(e)})
                         if fs.status_code == 200:
                             print(f"[{worker_id}] marked task {task_id} as failed after {retries} retries")
+                            WORKER_TASKS.labels(worker_id=worker_id, role=role, status='failed').inc()
                         else:
                             print(f"[{worker_id}] failed to mark task {task_id} as failed: {fs.status_code} {fs.text}")
                     except Exception as ee:
@@ -82,10 +95,13 @@ def process_loop(worker_id: str, role: str, stop_event: threading.Event, tier: s
                 r = session.post(f"{API}/tasks/{task_id}/result", json={"worker_name": worker_id, "result_text": result_text}, timeout=20)
                 if r.status_code == 200:
                     print(f"[{worker_id}] submitted result for {task_id}")
+                    WORKER_TASKS.labels(worker_id=worker_id, role=role, status='success').inc()
                 else:
                     print(f"[{worker_id}] failed to submit result {task_id}: {r.status_code} {r.text}")
+                    WORKER_TASKS.labels(worker_id=worker_id, role=role, status='submit_failed').inc()
             except Exception as e:
                 print(f"[{worker_id}] error submitting result {task_id}: {e}")
+                WORKER_TASKS.labels(worker_id=worker_id, role=role, status='submit_error').inc()
 
         except KeyboardInterrupt:
             break
@@ -95,6 +111,13 @@ def process_loop(worker_id: str, role: str, stop_event: threading.Event, tier: s
 
 
 def spawn_workers(worker_id_prefix: str, role: str, count: int, tier: str):
+    # Start prometheus metrics server for this worker process
+    try:
+        start_http_server(WORKER_METRICS_PORT)
+        print(f"Worker metrics available on port {WORKER_METRICS_PORT}")
+    except Exception as e:
+        print(f"Failed to start metrics server: {e}")
+
     threads = []
     stop_event = threading.Event()
     for i in range(count):

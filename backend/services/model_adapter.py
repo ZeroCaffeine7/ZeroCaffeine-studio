@@ -1,14 +1,11 @@
-"""Model adapter for PoC allowing calling OpenAI or a local inference endpoint.
-
-Added robust retry/backoff logic to improve stability when calling remote
-inference providers. Retries are configurable via environment variables.
-"""
 from __future__ import annotations
 
 import os
 import time
 import requests
 from typing import Optional
+
+from prometheus_client import Counter, Histogram
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 LOCAL_MODEL_URL = os.environ.get('LOCAL_MODEL_URL')
@@ -24,6 +21,10 @@ MODEL_TIERS = {
 MAX_RETRIES = int(os.environ.get('MODEL_MAX_RETRIES', '3'))
 BACKOFF_BASE = float(os.environ.get('MODEL_BACKOFF_BASE', '1.0'))  # seconds
 BACKOFF_MULTIPLIER = float(os.environ.get('MODEL_BACKOFF_MULTIPLIER', '2.0'))
+
+# Prometheus metrics
+MODEL_CALLS = Counter('zc_model_calls_total', 'Model calls', ['provider', 'tier', 'status'])
+MODEL_LATENCY = Histogram('zc_model_call_duration_seconds', 'Model call latency seconds', ['provider', 'tier'])
 
 
 def _call_openai_chat(messages, model: str = 'gpt-3.5-turbo', temperature: float = 0.7) -> str:
@@ -59,7 +60,8 @@ def generate_text(prompt: str, tier: str = 'draft') -> str:
     """Generate text for a prompt using configured provider and tier.
 
     Retries on transient errors using exponential backoff. If all retries
-    exhaust, an exception is raised to the caller.
+    exhaust, an exception is raised to the caller. Prometheus metrics are
+    recorded for calls, latencies and failures.
     """
     model = MODEL_TIERS.get(tier, MODEL_TIERS['draft'])
 
@@ -67,25 +69,31 @@ def generate_text(prompt: str, tier: str = 'draft') -> str:
     backoff = BACKOFF_BASE
     last_exc = None
 
+    provider = 'local' if LOCAL_MODEL_URL else ('openai' if OPENAI_API_KEY else 'fallback')
+
     while attempt < MAX_RETRIES:
         try:
+            start = time.time()
             # Prefer local model if configured
             if LOCAL_MODEL_URL:
-                return _call_local_model(prompt)
-
-            if OPENAI_API_KEY:
+                res = _call_local_model(prompt)
+            elif OPENAI_API_KEY:
                 messages = [
                     {"role": "system", "content": "You are a helpful level design assistant. Provide structured output when possible."},
                     {"role": "user", "content": prompt},
                 ]
-                return _call_openai_chat(messages, model=model, temperature=0.7)
-
-            # Fallback deterministic behavior
-            return f"[SIMULATED OUTPUT] Prompt was: {prompt[:200]}"
+                res = _call_openai_chat(messages, model=model, temperature=0.7)
+            else:
+                res = f"[SIMULATED OUTPUT] Prompt was: {prompt[:200]}"
+            duration = time.time() - start
+            MODEL_LATENCY.labels(provider=provider, tier=tier).observe(duration)
+            MODEL_CALLS.labels(provider=provider, tier=tier, status='success').inc()
+            return res
 
         except Exception as e:
             last_exc = e
             attempt += 1
+            MODEL_CALLS.labels(provider=provider, tier=tier, status='error').inc()
             if attempt >= MAX_RETRIES:
                 break
             # simple jitter
