@@ -17,6 +17,34 @@ services:
     ports:
       - '6379:6379'
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - POC_DATABASE_URL=postgresql://pocuser:pocpass@postgres:5432/pocdb
+      - POC_REDIS_URL=redis://redis:6379/0
+    ports:
+      - '8000:8000'
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "backend/worker/worker_runner.py", "--worker-id", "level_ai", "--role", "level_design", "--concurrency", "1", "--tier", "synthesis"]
+    environment:
+      - POC_API_URL=http://api:8000
+      - POC_REDIS_URL=redis://redis:6379/0
+      - WORKER_METRICS_PORT=9125
+    ports:
+      - '9125:9125'
+    depends_on:
+      - api
+      - redis
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
@@ -26,16 +54,17 @@ services:
     ports:
       - '9090:9090'
     depends_on:
-      - redis
+      - api
+      - worker
 
   grafana:
     image: grafana/grafana:9.0
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./monitoring/grafana/dashboards/default_dashboard.json:/var/lib/grafana/dashboards/default_dashboard.json:ro
+      - grafana_data:/var/lib/grafana
     ports:
       - '3000:3000'
     depends_on:
@@ -54,3 +83,4 @@ services:
 
 volumes:
   pgdata:
+  grafana_data:

@@ -1,18 +1,36 @@
-# Prometheus + Grafana + Alertmanager
+# Monitoring: updated notes for containerized services
 
-This folder contains a minimal working configuration to run a monitoring stack for the PoC.
+After containerizing the API and worker, Prometheus now scrapes the internal
+compose service names directly (api:8000, worker:9125). This avoids host
+network issues like depending on host.docker.internal.
 
-Usage
+Usage (one-liner)
 
-1. Start the monitoring stack (from repo root):
-   docker compose up -d prometheus grafana alertmanager
+1. Ensure you have a `.env` file at repo root containing GF_SECURITY_ADMIN_PASSWORD and optional SLACK_WEBHOOK_URL.
+   cp .env.example .env
+   # edit .env and set a strong GF_SECURITY_ADMIN_PASSWORD value
 
-2. Open Grafana: http://localhost:3000 (login: admin / admin)
-   The dashboard "ZeroCaffeine Studio PoC" will be provisioned automatically.
+2. Start all services including API and worker:
 
-3. Prometheus will scrape the API metrics exposed at http://host.docker.internal:8000/metrics
-   and the worker metrics at host.docker.internal:9125. On Linux you may need to adjust
-   host.docker.internal to point to the host or update prometheus.yml accordingly.
+   docker compose up -d
 
-4. Configure Alertmanager notifications by setting SLACK_WEBHOOK_URL in your environment
-   (or edit monitoring/alertmanager/config.yml to provide SMTP credentials for email).
+3. Initialize DB (first run):
+
+   docker compose exec api python scripts/init_db.py
+
+4. Check services:
+
+   docker compose ps
+
+5. Access:
+   - API: http://localhost:8000
+   - Frontend: http://localhost:8080/index.html (if you run start_demo.sh locally or containerize frontend)
+   - Prometheus: http://localhost:9090
+   - Grafana: http://localhost:3000
+   - Alertmanager: http://localhost:9093
+
+Notes
+- The api service is built from the repository Dockerfile and exposes port 8000.
+- The worker service runs the PoC worker script and exposes metrics on port 9125.
+- If you prefer to run multiple worker containers, consider adding a docker-compose scale configuration
+  or switch to Docker Swarm / Kubernetes for orchestration.
